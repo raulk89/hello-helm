@@ -1,0 +1,80 @@
+---
+# Source: logmower-operator/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-flask
+  labels:
+    app: hello-flask
+spec:
+  selector:
+    app: hello-flask
+  ports:
+  - protocol: TCP
+    port: 8000
+---
+# Source: logmower-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-flask
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hello-flask
+  template:
+    metadata:
+      labels:
+        app: hello-flask
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+        fsGroupChangePolicy: "OnRootMismatch"
+      enableServiceLinks: false
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: hello-flask
+          image: harbor.codemowers.eu/raulk89/hello-flask:latest
+          securityContext: 
+            readOnlyRootFilesystem: true
+          command:
+            - /app/app.py
+            - Greetings from Helm (Tere Raul)
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - containerPort: 8000
+              name: metrics
+---
+# Source: logmower-operator/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello-helm
+  annotations:
+    kubernetes.io/ingress.class: shared
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    external-dns.alpha.kubernetes.io/target: traefik.codemowers.ee
+spec:
+  rules:
+    - host: raul-helm-foobar.codemowers.ee
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: hello-flask
+                port:
+                  number: 8000
+  tls:
+    - hosts:
+        - "*.codemowers.ee"
